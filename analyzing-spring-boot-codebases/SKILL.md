@@ -24,16 +24,27 @@ Use this skill when the repository is a Java Spring Boot application and the goa
 
 ## Outputs
 
-Produce these outputs unless the user asks for a narrower scope:
+### Required outputs
+
+Always produce all of the following, even when the user does not explicitly ask for diagrams. Diagrams are part of the audit, not an optional add-on. Do not skip them, do not summarize them in prose, and do not defer them to a later step.
 
 - `spring-boot-audit-report.md`
-- A Mermaid component diagram showing application structure
-- A Mermaid sequence diagram showing one representative end-to-end flow
+- A Mermaid **component diagram** showing application structure with actual discovered controllers, services, repositories, data stores, message brokers, caches, and external systems
+- A Mermaid **representative sequence diagram** for one end-to-end request, including auth, validation, service logic, persistence, integration calls, and error handling
+- A Mermaid **package dependency diagram** (always-on per `reference/architecture.md`)
 - A prioritized findings list using P0, P1, P2, and P3 severity
 
-Conditional output:
+### Conditional outputs
 
-- `azure-resilience-report.md` — produced **only** when Azure detection signals are present in the target codebase (Azure SDK dependencies, `azure.*` or `spring.cloud.azure.*` configuration keys, ARM or Bicep templates, `azurerm_*` or `azapi_*` Terraform resources, container references to `*.azurecr.io` or `mcr.microsoft.com`, App Service or `*.azurewebsites.net` references, or CI steps invoking `azure/login`, `azure/cli`, `azure/webapps-deploy`, or `aks-set-context`). When no Azure signals are present, do not produce this file.
+Produce each of the following when its trigger is present in the target codebase. The triggers are defined in `reference/architecture.md` (per-diagram "When to generate" rules) and in the Conditional Loading Guidance table at the bottom of this document. If the trigger is present, the diagram is required, not optional.
+
+- **Per-flow sequence diagrams** — one per top business flow discovered in Step 2 (target three to five), in addition to the representative sequence diagram above
+- **ER / domain model diagram** — when JPA `@Entity` classes are present
+- **Async / event flow diagram** — when `@KafkaListener`, `@RabbitListener`, or `@EventListener` are present
+- **Deployment diagram** — when `Dockerfile`, `docker-compose.yml`, or Kubernetes manifests are present
+- **State diagram per entity** — one per entity that has an explicit lifecycle or status enum
+- **Auth / security flow diagram** — when OAuth2, OIDC, or JWT are in use
+- `azure-resilience-report.md` — produced **only** when Azure detection signals are present in the target codebase (Azure SDK dependencies, `azure.*` or `spring.cloud.azure.*` configuration keys, ARM or Bicep templates, `azurerm_*` or `azapi_*` Terraform resources, container references to `*.azurecr.io` or `mcr.microsoft.com`, App Service or `*.azurewebsites.net` references, or CI steps invoking `azure/login`, `azure/cli`, `azure/webapps-deploy`, or `aks-set-context`). When Azure signals are present, this report includes one Azure-aware end-to-end Mermaid sequence diagram per top critical flow. When no Azure signals are present, do not produce this file.
 
 ## Workflow
 
@@ -44,11 +55,22 @@ Spring Boot Audit Progress
 - [ ] Step 1: Detect build system and project structure
 - [ ] Step 2: Inventory modules, layers, and endpoints
 - [ ] Step 3: Review dependencies and platform versions
-- [ ] Step 4: Map architecture and representative request flow
+- [ ] Step 4a: Always-on diagrams
+  - [ ] Component diagram
+  - [ ] Representative sequence diagram
+  - [ ] Package dependency diagram
+- [ ] Step 4b: Conditional diagrams (skip rows whose trigger is absent)
+  - [ ] Per-flow sequence diagrams (3–5 top flows)
+  - [ ] ER / domain model diagram (when @Entity present)
+  - [ ] Async / event flow diagram (when @KafkaListener / @RabbitListener / @EventListener present)
+  - [ ] Deployment diagram (when Dockerfile / docker-compose / k8s manifests present)
+  - [ ] State diagram per entity (when status/lifecycle enum present)
+  - [ ] Auth / security flow diagram (when OAuth2 / OIDC / JWT present)
+  - [ ] Azure end-to-end flow diagram(s) (when Azure signals present; lives in azure-resilience-report.md)
 - [ ] Step 5: Run security and vulnerability review
 - [ ] Step 6: Run code quality and maintainability review
 - [ ] Step 7: Review configuration and tests
-- [ ] Step 8: Generate diagrams and final report
+- [ ] Step 8: Write the final report (with all diagrams above embedded)
 ```
 
 ## Step 1: Detect project shape
@@ -86,14 +108,29 @@ Do not label a dependency as vulnerable unless the version is identified and the
 
 ## Step 4: Build architecture and flow diagrams
 
-Use [reference/architecture.md](reference/architecture.md).
+Use [reference/architecture.md](reference/architecture.md). Diagrams are mandatory output, not narrative. Emit each diagram as a Mermaid fenced code block in the audit report. Do not replace any diagram with a prose summary.
 
-Generate:
+### Step 4a: Always generate
 
-- One Mermaid component diagram with actual discovered controllers, services, repositories, data stores, message brokers, caches, and external systems
-- One Mermaid sequence diagram for a representative request from entry to response, including auth, validation, service logic, persistence, integration calls, and error handling
+Produce these diagrams every time, regardless of project size. Skipping them is a defect of the audit, not a scoping choice.
 
-Prefer a business-critical or structurally rich endpoint for the sequence diagram.
+- One Mermaid **component diagram** with actual discovered controllers, services, repositories, data stores, message brokers, caches, and external systems
+- One Mermaid **representative sequence diagram** for an end-to-end request, including auth, validation, service logic, persistence, integration calls, and error handling. Prefer a business-critical or structurally rich endpoint.
+- One Mermaid **package dependency diagram** surfacing layering between top-level packages (controller, service, repository, domain, config). Show any layering violations as visible edges.
+
+### Step 4b: Conditional diagrams
+
+For each diagram below, check the trigger against the target codebase. If the trigger is present, generate the diagram — do not defer it, do not summarize it in prose, do not skip it because the codebase "looks small". If the trigger is absent, skip it without comment.
+
+- **Per-flow sequence diagrams** — trigger: more than one significant business flow discovered in Step 2. Generate one diagram for each of the top three to five flows. These are in addition to the representative sequence diagram in Step 4a.
+- **ER / domain model diagram** — trigger: JPA `@Entity` classes present.
+- **Async / event flow diagram** — trigger: `@KafkaListener`, `@RabbitListener`, or `@EventListener` present.
+- **Deployment diagram** — trigger: `Dockerfile`, `docker-compose.yml`, or Kubernetes manifests present.
+- **State diagram per entity** — trigger: an entity has an explicit lifecycle or status enum. Generate one diagram per such entity.
+- **Auth / security flow diagram** — trigger: OAuth2, OIDC, or JWT in use.
+- **Azure end-to-end flow diagram(s)** — trigger: any Azure detection signal in the target codebase. Owned by [reference/azure-resilience.md](reference/azure-resilience.md), not by this step. Lives in `azure-resilience-report.md`, not in the main audit report.
+
+Use the Mermaid templates in [reference/architecture.md](reference/architecture.md) for shape and syntax. Replace every placeholder label with a real discovered name from the target codebase — class names, package names, topic and queue names, deployment and ingress names, enum values. Do not emit a diagram with placeholder labels.
 
 ## Step 5: Run security review
 
@@ -145,6 +182,8 @@ Use [reference/extended-checks.md](reference/extended-checks.md) for optional de
 ## Step 8: Write the report
 
 Use [reference/report-template.md](reference/report-template.md).
+
+Embed every diagram produced in Step 4a and Step 4b directly in the report as Mermaid fenced code blocks. The report is not complete until every required and triggered diagram is present.
 
 Rules:
 
